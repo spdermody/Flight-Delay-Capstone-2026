@@ -1,0 +1,28 @@
+---
+title: "flight_data_web_scrape"
+output: pdf_document
+date: "2026-02-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Scraping Capacity Numbers from Wikipedia
+
+```{r}
+library(tidyverse)
+library(rvest)
+
+# This Wikipedia page has 31 US Large Hub Airports and capacity numbers from 2015-2024
+page <- read_html("https://en.wikipedia.org/wiki/List_of_the_busiest_airports_in_the_United_States")
+
+capacity <- page %>% html_element(xpath='//*[@id="mw-content-text"]/div[2]/table[1]') %>% html_table()
+colnames(capacity) <- c("Rank","Name","Airport","Cities","Metro Area","State","2024","2023","2022","2021","2020","2019","2018","2017","2016","2015")
+
+# Select only IATA Code and The Capacity Numbers by Year
+capacity <- capacity[,c(3,7:16)] %>% as.data.frame()
+capacity %>% head()
+```
+
