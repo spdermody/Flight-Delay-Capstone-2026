@@ -26,3 +26,11 @@ capacity <- capacity[,c(3,7:16)] %>% as.data.frame()
 capacity %>% head()
 ```
 
+
+# Bring in Flight Delay Data from 2015 to 2024
+
+```{r}
+delay <- read.csv("delay_core_2015_2024.csv")
+delay %>% summary()
+```
+
