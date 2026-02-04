@@ -31,6 +31,38 @@ capacity %>% head()
 
 ```{r}
 delay <- read.csv("delay_core_2015_2024.csv")
-delay %>% summary()
+delay <- delay %>% filter(Year%in%c("2015","2016","2017","2018","2019","2020","2021","2022","2023","2024"))
+```
+
+```{r}
+top10 <- delay %>% group_by(Loc) %>%
+  summarise(Total.Delays=sum(Tot.Delays)) %>%
+  arrange(desc(Total.Delays))
+top10$Loc[1:10]
+top10
+```
+
+Top 10 Airports with the Most Total Delays from 2015-2024:
+
+1. LGA (NY)
+2. EWR (NJ)
+3. SFO (CA)
+4. ORD (IL)
+5. JFK (NY)
+6. LAX (CA)
+7. LAS (NV)
+8. DFW (TX)
+9. BOS (MA)
+10. PHL (PA)
+
+
+```{r}
+onlytop5 <- delay %>% filter(Loc %in% top10$Loc[c(1:5)])
+ggplot(onlytop5,aes(x=Year,y=Tot.Delays,color=Loc,group=Loc)) + 
+  geom_point() +
+  geom_line() +
+  labs(title="Total Flight Delays of Top 5 Airports with Most Delayed Operations",
+       y = "Annual Delayed Operations",
+       color = "Airport")
 ```
 
