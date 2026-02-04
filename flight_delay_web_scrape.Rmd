@@ -1,6 +1,6 @@
 ---
 title: "flight_data_web_scrape"
-output: pdf_document
+output: md_document
 date: "2026-02-03"
 ---
 
