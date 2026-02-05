@@ -66,3 +66,119 @@ ggplot(onlytop5,aes(x=Year,y=Tot.Delays,color=Loc,group=Loc)) +
        color = "Airport")
 ```
 
+```{r}
+#Reshaping and Joining Capacity and Delay Data
+capacity_long <- capacity %>%
+  dplyr::rename(Loc = Airport) %>%   
+  tidyr::pivot_longer(
+    cols = `2024`:`2015`,
+    names_to = "Year",
+    values_to = "Passengers"
+  ) %>%
+  dplyr::mutate(
+    Year = as.integer(Year),
+    Passengers = readr::parse_number(Passengers)
+  )
+
+head(capacity_long)
+delay2 <- delay %>%
+  dplyr::mutate(Year = as.integer(Year))
+
+combo <- delay2 %>%
+  dplyr::inner_join(capacity_long, by = c("Loc", "Year"))
+
+dplyr::glimpse(combo)
+```
+
+```{r}
+ggplot(combo, aes(x = Passengers)) +
+  geom_histogram(bins = 30, fill = "steelblue") +
+  scale_x_continuous(labels = scales::label_number(scale = 1e-6, suffix = "M")) +
+  labs(title = "Distribution of Passenger Volume",
+       x = "Passengers (Millions)")
+
+ggplot(combo, aes(x = Tot.Delays)) +
+  geom_histogram(bins = 30, fill = "darkorange") +
+  labs(title = "Distribution of Total Delays",
+       x = "Total Delays")
+```
+Passenger volume is right-skewed, with most airports serving between 5 and 25 million passengers and a small number of very large hub airports serving over 40 million. Total delays are highly right-skewed, indicating that while most airports experience relatively few delays, a small number of major airports account for disproportionately high delay counts. These plots provide context for the analysis by showing that both variables are dominated by a few large airports, which influences how relationships in the data should be interpreted
+
+
+```{r}
+#Passengers vs Total Delays
+ggplot(combo, aes(x = Passengers, y = Tot.Delays)) +
+  geom_point(alpha = 0.35, size = 1) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "M")) +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Passengers vs Total Delays (Airport-Year, 2015–2024)",
+    x = "Passengers (Millions)",
+    y = "Total Delays"
+  ) +
+  theme_minimal(base_size = 12)
+```
+Each point is one airport in one year (2015–2024). The x-axis is how many passengers that airport had that year, and the y-axis is how many total delayed flights it had. There is a positive relationship: airports with more passengers tend to have more delays, but it’s not the only factor (weather, layout, airspace, management, etc.).
+
+```{r}
+#Passengers vs Total Delay Hours
+ggplot(combo, aes(x = Passengers, y = Tot.Tot.Min/60)) +
+  geom_point(alpha = 0.35, size = 1) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "M")) +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Passengers vs Total Delay Hours (Airport-Year, 2015–2024)",
+    x = "Passengers (Millions)",
+    y = "Total Delay Hours"
+  ) +
+  theme_minimal(base_size = 12)
+```
+Same idea as the plot above, but instead of counting how many delays, this measures how much total time was lost to delays (in hours). Again, there’s a clear upward trend. Larger airports don’t just have more delays, they also lose more total time to delays. So congestion at large airports has a real cost in hours, not just in number of events.
+
+
+```{r}
+#Delay Causes Over Time (Top 5 Airports)
+delay_causes %>%
+  filter(Loc %in% top5_codes) %>%
+  mutate(
+    Year_num = as.integer(Year),
+    Year = factor(Year_num),
+    Cause = factor(Cause, levels = c("Weather.Delays","Vol.Delays","Equip.Delays","Runway.Delays","Other.Delays"))
+  ) %>%
+  ggplot(aes(x = Year, y = Delays, fill = Cause)) +
+  geom_col() +
+  facet_wrap(~Loc, scales = "free_y") +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_discrete(breaks = as.character(seq(2015, 2024, by = 2))) +
+  labs(
+    title = "Delay Causes Over Time (Top 5 Airports)",
+    x = "Year",
+    y = "Number of Delays",
+    fill = "Cause"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+For the 5 most delayed airports overall (EWR, JFK, LGA, ORD, SFO), the bars show how many delays occurred each year and is broken down by cause. Weather is the dominant cause at almost all major airports and volume (congestion) is consistently the second biggest cause.
+
+```{r}
+#Congestion vs Passenger Volume
+combo %>%
+  mutate(vol_per_million = Vol.Delays / (Passengers / 1e6)) %>%
+  ggplot(aes(x = Passengers, y = vol_per_million)) +
+  geom_point(alpha = 0.35, size = 1) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "M")) +
+  scale_y_continuous(labels = comma) +
+  coord_cartesian(ylim = c(0, 300)) +
+  labs(
+    title = "Congestion vs Passenger Volume (Zoomed)",
+    x = "Passengers (Millions)",
+    y = "Volume Delays per 1,000,000 passengers"
+  ) +
+  theme_minimal(base_size = 12)
+```
+This plot shows congestion-related delays per million passengers, which adjusts for airport size. The relatively flat trend suggests that although larger airports have more total delays, they are not substantially more congested on a per-passenger basis than smaller airports.
