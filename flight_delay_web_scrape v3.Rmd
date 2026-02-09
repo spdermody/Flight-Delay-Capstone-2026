@@ -91,6 +91,7 @@ dplyr::glimpse(combo)
 ```
 
 ```{r}
+library(scales)
 ggplot(combo, aes(x = Passengers)) +
   geom_histogram(bins = 30, fill = "steelblue") +
   scale_x_continuous(labels = scales::label_number(scale = 1e-6, suffix = "M")) +
@@ -140,27 +141,20 @@ Same idea as the plot above, but instead of counting how many delays, this measu
 
 ```{r}
 #Delay Causes Over Time (Top 5 Airports)
-delay_causes %>%
-  filter(Loc %in% top5_codes) %>%
-  mutate(
-    Year_num = as.integer(Year),
-    Year = factor(Year_num),
-    Cause = factor(Cause, levels = c("Weather.Delays","Vol.Delays","Equip.Delays","Runway.Delays","Other.Delays"))
-  ) %>%
-  ggplot(aes(x = Year, y = Delays, fill = Cause)) +
-  geom_col() +
-  facet_wrap(~Loc, scales = "free_y") +
-  scale_y_continuous(labels = scales::comma) +
-  scale_x_discrete(breaks = as.character(seq(2015, 2024, by = 2))) +
-  labs(
-    title = "Delay Causes Over Time (Top 5 Airports)",
-    x = "Year",
-    y = "Number of Delays",
-    fill = "Cause"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+top5_codes <- delay %>%
+  group_by(Loc) %>%
+  summarise(TotalDelays = sum(Tot.Delays, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(TotalDelays)) %>%
+  slice(1:5) %>%
+  pull(Loc)
 
+delay_causes <- delay %>%
+  select(Year, Loc, Weather.Delays, Vol.Delays, Equip.Delays, Runway.Delays, Other.Delays) %>%
+  pivot_longer(
+    cols = ends_with(".Delays"),
+    names_to = "Cause",
+    values_to = "Delays"
+  )
 ```
 For the 5 most delayed airports overall (EWR, JFK, LGA, ORD, SFO), the bars show how many delays occurred each year and is broken down by cause. Weather is the dominant cause at almost all major airports and volume (congestion) is consistently the second biggest cause.
 
@@ -182,3 +176,64 @@ combo %>%
   theme_minimal(base_size = 12)
 ```
 This plot shows congestion-related delays per million passengers, which adjusts for airport size. The relatively flat trend suggests that although larger airports have more total delays, they are not substantially more congested on a per-passenger basis than smaller airports.
+
+
+
+
+
+
+*adding
+Merge Capacity and Delay Data
+```{r}
+#Convert Capacity dataset to long format
+capacity_long <- capacity %>%
+  pivot_longer(cols = -Airport, names_to = "Year", values_to = "Passengers") %>%
+  mutate(
+    Year = as.integer(Year),
+    Passengers = as.numeric(gsub(",", "", Passengers))
+  )
+
+#Merge with Delay dataset
+delay_capacity <- delay %>%
+  mutate(Year = as.integer(Year)) %>%
+  left_join(capacity_long, by = c("Loc" = "Airport", "Year" = "Year"))
+```
+
+Add "Delay Rate" Metric
+```{r}
+delay_capacity <- delay_capacity %>% 
+  mutate(
+    Year = as.integer(Year),
+    DelayRate = Tot.Delays / Passengers * 1000000)
+
+```
+Creating DelayRate so that can interpret delays per a million passengers (since large airports will be weighted unevenly). This is to adjust for aiport size.
+
+Delay Rate over Time
+```{r}
+top5_rate <- delay_capacity %>%
+  group_by(Loc) %>%
+  summarise(total_delays = sum(Tot.Delays, na.rm=TRUE)) %>%
+  arrange(desc(total_delays)) %>%
+  slice(1:5) %>%
+  pull(Loc)
+
+delay_capacity %>%
+  filter(Loc %in% top5_rate, !is.na(Passengers)) %>%
+  ggplot(aes(x = Year, y = DelayRate, color = Loc)) +
+  geom_line(linewidth=1) +
+  geom_point() +
+  labs(
+    title = "Delay Rate Over Time",
+    y = "Delays per Million Passengers",
+    x = "Year",
+    color = "Airport"
+  ) +
+  theme_minimal()
+```
+Once cleaned up more, we can analyze how many delays an airport has per million passengers every year.
+This is a better comparison of airports, as bigger airports will tend to have more delays.
+
+
+
+
