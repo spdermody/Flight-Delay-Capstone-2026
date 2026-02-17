@@ -1,0 +1,386 @@
+---
+title: "flight_data_web_scrape"
+output: md_document
+date: "2026-02-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Scraping Capacity Numbers from Wikipedia
+
+```{r}
+library(tidyverse)
+library(rvest)
+
+# This Wikipedia page has 31 US Large Hub Airports and capacity numbers from 2015-2024
+page <- read_html("https://en.wikipedia.org/wiki/List_of_the_busiest_airports_in_the_United_States")
+
+capacity <- page %>% html_element(xpath='//*[@id="mw-content-text"]/div[2]/table[1]') %>% html_table()
+colnames(capacity) <- c("Rank","Name","Airport","Cities","Metro Area","State","2024","2023","2022","2021","2020","2019","2018","2017","2016","2015")
+
+# Select only IATA Code and The Capacity Numbers by Year
+capacity <- capacity[,c(3,7:16)] %>% as.data.frame()
+capacity %>% head()
+```
+
+
+# Bring in Flight Delay Data from 2015 to 2024
+
+```{r}
+delay <- read.csv("delay_core_2015_2024.csv")
+delay <- delay %>% filter(Year%in%c("2015","2016","2017","2018","2019","2020","2021","2022","2023","2024"))
+```
+
+```{r}
+top10 <- delay %>% group_by(Loc) %>%
+  summarise(Total.Delays=sum(Tot.Delays)) %>%
+  arrange(desc(Total.Delays))
+top10$Loc[1:10]
+top10
+```
+
+Top 10 Airports with the Most Total Delays from 2015-2024:
+
+1. LGA (NY)
+2. EWR (NJ)
+3. SFO (CA)
+4. ORD (IL)
+5. JFK (NY)
+6. LAX (CA)
+7. LAS (NV)
+8. DFW (TX)
+9. BOS (MA)
+10. PHL (PA)
+
+
+```{r}
+onlytop5 <- delay %>% filter(Loc %in% top10$Loc[c(1:5)])
+ggplot(onlytop5,aes(x=Year,y=Tot.Delays,color=Loc,group=Loc)) + 
+  geom_point() +
+  geom_line() +
+  labs(title="Total Flight Delays of Top 5 Airports with Most Delayed Operations",
+       y = "Annual Delayed Operations",
+       color = "Airport")
+```
+
+```{r}
+#Reshaping and Joining Capacity and Delay Data
+capacity_long <- capacity %>%
+  dplyr::rename(Loc = Airport) %>%   
+  tidyr::pivot_longer(
+    cols = `2024`:`2015`,
+    names_to = "Year",
+    values_to = "Passengers"
+  ) %>%
+  dplyr::mutate(
+    Year = as.integer(Year),
+    Passengers = readr::parse_number(Passengers)
+  )
+
+head(capacity_long)
+delay2 <- delay %>%
+  dplyr::mutate(Year = as.integer(Year))
+
+combo <- delay2 %>%
+  dplyr::inner_join(capacity_long, by = c("Loc", "Year"))
+
+dplyr::glimpse(combo)
+```
+
+```{r}
+library(scales)
+ggplot(combo, aes(x = Passengers)) +
+  geom_histogram(bins = 30, fill = "steelblue") +
+  scale_x_continuous(labels = scales::label_number(scale = 1e-6, suffix = "M")) +
+  labs(title = "Distribution of Passenger Volume",
+       x = "Passengers (Millions)")
+
+ggplot(combo, aes(x = Tot.Delays)) +
+  geom_histogram(bins = 30, fill = "darkorange") +
+  labs(title = "Distribution of Total Delays",
+       x = "Total Delays")
+```
+Passenger volume is right-skewed, with most airports serving between 5 and 25 million passengers and a small number of very large hub airports serving over 40 million. Total delays are highly right-skewed, indicating that while most airports experience relatively few delays, a small number of major airports account for disproportionately high delay counts. These plots provide context for the analysis by showing that both variables are dominated by a few large airports, which influences how relationships in the data should be interpreted
+
+
+```{r}
+#Passengers vs Total Delays
+ggplot(combo, aes(x = Passengers, y = Tot.Delays)) +
+  geom_point(alpha = 0.35, size = 1) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "M")) +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Passengers vs Total Delays (Airport-Year, 2015–2024)",
+    x = "Passengers (Millions)",
+    y = "Total Delays"
+  ) +
+  theme_minimal(base_size = 12)
+```
+Each point is one airport in one year (2015–2024). The x-axis is how many passengers that airport had that year, and the y-axis is how many total delayed flights it had. There is a positive relationship: airports with more passengers tend to have more delays, but it’s not the only factor (weather, layout, airspace, management, etc.).
+
+```{r}
+#Passengers vs Total Delay Hours
+ggplot(combo, aes(x = Passengers, y = Tot.Tot.Min/60)) +
+  geom_point(alpha = 0.35, size = 1) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "M")) +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Passengers vs Total Delay Hours (Airport-Year, 2015–2024)",
+    x = "Passengers (Millions)",
+    y = "Total Delay Hours"
+  ) +
+  theme_minimal(base_size = 12)
+```
+Same idea as the plot above, but instead of counting how many delays, this measures how much total time was lost to delays (in hours). Again, there’s a clear upward trend. Larger airports don’t just have more delays, they also lose more total time to delays. So congestion at large airports has a real cost in hours, not just in number of events.
+
+
+```{r}
+#Delay Causes Over Time (Top 5 Airports)
+top5_codes <- delay %>%
+  group_by(Loc) %>%
+  summarise(TotalDelays = sum(Tot.Delays, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(TotalDelays)) %>%
+  slice(1:5) %>%
+  pull(Loc)
+
+delay_causes <- delay %>%
+  select(Year, Loc, Weather.Delays, Vol.Delays, Equip.Delays, Runway.Delays, Other.Delays) %>%
+  pivot_longer(
+    cols = ends_with(".Delays"),
+    names_to = "Cause",
+    values_to = "Delays"
+  )
+```
+For the 5 most delayed airports overall (EWR, JFK, LGA, ORD, SFO), the bars show how many delays occurred each year and is broken down by cause. Weather is the dominant cause at almost all major airports and volume (congestion) is consistently the second biggest cause.
+
+```{r}
+#Congestion vs Passenger Volume
+combo %>%
+  mutate(vol_per_million = Vol.Delays / (Passengers / 1e6)) %>%
+  ggplot(aes(x = Passengers, y = vol_per_million)) +
+  geom_point(alpha = 0.35, size = 1) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "M")) +
+  scale_y_continuous(labels = comma) +
+  coord_cartesian(ylim = c(0, 300)) +
+  labs(
+    title = "Congestion vs Passenger Volume (Zoomed)",
+    x = "Passengers (Millions)",
+    y = "Volume Delays per 1,000,000 passengers"
+  ) +
+  theme_minimal(base_size = 12)
+```
+This plot shows congestion-related delays per million passengers, which adjusts for airport size. The relatively flat trend suggests that although larger airports have more total delays, they are not substantially more congested on a per-passenger basis than smaller airports.
+
+
+
+
+
+
+*adding
+Merge Capacity and Delay Data
+```{r}
+#Convert Capacity dataset to long format
+capacity_long <- capacity %>%
+  pivot_longer(cols = -Airport, names_to = "Year", values_to = "Passengers") %>%
+  mutate(
+    Year = as.integer(Year),
+    Passengers = as.numeric(gsub(",", "", Passengers))
+  )
+
+#Merge with Delay dataset
+delay_capacity <- delay %>%
+  mutate(Year = as.integer(Year)) %>%
+  left_join(capacity_long, by = c("Loc" = "Airport", "Year" = "Year"))
+```
+
+Add "Delay Rate" Metric
+```{r}
+delay_capacity <- delay_capacity %>% 
+  mutate(
+    Year = as.integer(Year),
+    DelayRate = Tot.Delays / Passengers * 1000000)
+
+```
+Creating DelayRate so that can interpret delays per a million passengers (since large airports will be weighted unevenly). This is to adjust for aiport size.
+
+Delay Rate over Time
+```{r}
+top5_rate <- delay_capacity %>%
+  group_by(Loc) %>%
+  summarise(total_delays = sum(Tot.Delays, na.rm=TRUE)) %>%
+  arrange(desc(total_delays)) %>%
+  slice(1:5) %>%
+  pull(Loc)
+
+delay_capacity %>%
+  filter(Loc %in% top5_rate, !is.na(Passengers)) %>%
+  ggplot(aes(x = Year, y = DelayRate, color = Loc)) +
+  geom_line(linewidth=1) +
+  geom_point() +
+  labs(
+    title = "Delay Rate Over Time",
+    y = "Delays per Million Passengers",
+    x = "Year",
+    color = "Airport"
+  ) +
+  theme_minimal()
+```
+Once cleaned up more, we can analyze how many delays an airport has per million passengers every year.
+This is a better comparison of airports, as bigger airports will tend to have more delays.
+
+
+2/10 Added Code
+```{r}
+#creating sunbelt states
+airport_state <- tibble(
+  Loc = c("ATL","LAX","ORD","DFW","DEN","JFK","SFO","SEA","LAS","MCO",
+          "EWR","CLT","PHX","IAH","MIA","BOS","MSP","DTW","PHL","LGA",
+          "BWI","SLC","SAN","TPA","HNL","PDX","AUS","DAL","FLL","DCA"),
+  State = c("GA","CA","IL","TX","CO","NY","CA","WA","NV","FL",
+            "NJ","NC","AZ","TX","FL","MA","MN","MI","PA","NY",
+            "MD","UT","CA","FL","HI","OR","TX","TX","FL","VA")
+)
+delay_capacity <- delay_capacity %>%
+  left_join(airport_state, by = "Loc")
+sunbelt_states <- c("CA","AZ","NM","TX","LA","MS","AL","GA",
+                    "FL","SC","NC","TN","AR","NV","OK")
+
+delay_capacity <- delay_capacity %>%
+  mutate(
+    SunBelt = ifelse(State %in% sunbelt_states,
+                     "Sun Belt", "Non Sun Belt")
+  )
+```
+
+
+```{r}
+#checking
+table(delay_capacity$SunBelt)
+```
+
+
+```{r}
+#delay rate overtime- sunbelt vs non sunbelt
+delay_capacity %>%
+  group_by(Year, SunBelt) %>%
+  summarise(avg_delay_rate = mean(DelayRate, na.rm = TRUE),
+            .groups = "drop") %>%
+  ggplot(aes(x = Year, y = avg_delay_rate, color = SunBelt)) +
+  geom_line(linewidth = 1.2) +
+  geom_point() +
+  labs(
+    title = "Average Delay Rate Over Time",
+    y = "Delays per Million Passengers",
+    x = "Year",
+    color = "Region"
+  ) +
+  theme_minimal()
+```
+This figure shows the average delay rate (delays per million passengers) for Sun Belt and Non–Sun Belt airports from 2015–2024. Prior to COVID-19, Non–Sun Belt airports experienced substantially higher delay rates, but both regions saw a sharp decline in 2020 due to reduced air traffic. Following COVID, delay rates increased again in both regions, with Sun Belt airports showing a faster increase and nearly converging with Non–Sun Belt airports by 2024. This suggests that relative congestion at Sun Belt airports has grown in recent years when controlling for airport size.
+
+
+```{r}
+#delays due to congestion
+delay_capacity %>%
+  mutate(VolumeShare = Vol.Delays / Tot.Delays) %>%
+  group_by(Year, SunBelt) %>%
+  summarise(avg_vol_share = mean(VolumeShare, na.rm = TRUE),
+            .groups = "drop") %>%
+  ggplot(aes(x = Year, y = avg_vol_share, color = SunBelt)) +
+  geom_line(linewidth = 1.2) +
+  geom_point() +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    title = "Share of Delays Due to Congestion",
+    y = "Volume Delay Share (%)",
+    x = "Year"
+  ) +
+  theme_minimal()
+```
+This figure shows the proportion of total delays attributed to volume (congestion) over time for Sun Belt and Non–Sun Belt airports. Sun Belt airports consistently exhibit a higher share of congestion-related delays across all years, indicating that capacity and traffic volume play a larger role in delays in these regions. While congestion increased slightly in both regions after COVID, the gap between Sun Belt and Non–Sun Belt airports remains persistent, suggesting structural differences in how delays arise across regions.
+
+
+```{r}
+#before vs after covid
+delay_capacity %>%
+  mutate(Period = ifelse(Year <= 2019, "Pre-COVID", "Post-COVID")) %>%
+  group_by(SunBelt, Period) %>%
+  summarise(avg_rate = mean(DelayRate, na.rm = TRUE),
+            .groups = "drop") %>%
+  ggplot(aes(x = Period, y = avg_rate, fill = SunBelt)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Delay Rate Before vs After COVID",
+    y = "Average Delays per Million Passengers"
+  ) + scale_x_discrete(limits = c("Pre-COVID", "Post-COVID")) +
+  theme_minimal()
+```
+This comparison summarizes average delay rates before (2015–2019) and after COVID (2021–2024) for both regions. Delay rates declined substantially for both Sun Belt and Non–Sun Belt airports following COVID, reflecting reduced demand and operational changes during the recovery period. However, the relative difference between regions narrowed post-COVID, indicating that Sun Belt airports returned to higher delay levels more quickly than Non–Sun Belt airports.
+
+
+```{r}
+delay_capacity %>%
+  filter(Year %in% c(2019, 2024)) %>%
+  select(Loc, Year, DelayRate, SunBelt) %>%
+  pivot_wider(names_from = Year, values_from = DelayRate) %>%
+  mutate(Change = `2024` - `2019`) %>%
+  ggplot(aes(x = SunBelt, y = Change, fill = SunBelt)) +
+  geom_boxplot() +
+  labs(
+    title = "Change in Delay Rate from Pre-COVID to 2024",
+    y = "Change in Delay Rate"
+  ) +
+  theme_minimal()
+```
+This boxplot shows the change in delay rate between the pre-COVID period and 2024 for each airport, grouped by region. Sun Belt airports generally show small positive changes or recoveries toward pre-COVID delay levels, while many Non–Sun Belt airports experienced larger decreases in delay rates. This supports the idea that Sun Belt airports recovered more quickly in terms of traffic and congestion, leading to a faster return to higher delay rates.
+
+
+## 2/17 Updates with Gate Data ##
+
+```{r}
+delay$Sun.Belt <- as.factor(delay$Sun.Belt)
+levels(delay$Sun.Belt) <- c("Northern","Sun Belt")
+delay$Gates %>% summary()
+
+by_region <- delay %>% 
+  group_by(Sun.Belt,Year) %>%
+  summarise(
+    Avg_gates = mean(Gates),
+    Min_gates = min(Gates),
+    Max_gates = quantile(Gates)[4],
+    Avg_runways = mean(Runways),
+    Min_runways = quantile(Runways)[2],
+    Max_runways = quantile(Runways)[4]
+  )
+by_region
+
+ggplot(by_region, aes(x = Year, y = Avg_gates, color = Sun.Belt, fill = Sun.Belt, group = Sun.Belt)) +
+  geom_line(size = 1) +
+  geom_point() +
+  labs(title = "Average Airport Gates by Region",
+       y = "Number of Gates",
+       fill = "Region",
+       color = "Region") +
+  theme_minimal()
+```
+
+## Runway Change over Time Visualization ##
+
+```{r}
+ggplot(by_region, aes(x = Year, y = Avg_runways, color = Sun.Belt, fill = Sun.Belt, group = Sun.Belt)) +
+  geom_line(size = 1) +
+  geom_point() +
+  labs(title = "Average Airport Runways by Region",
+       y = "Number of Runways",
+       fill = "Region",
+       color = "Region") +
+  ylim(3.5,4.5) +
+  theme_minimal()
+```
+
