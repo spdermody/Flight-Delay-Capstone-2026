@@ -34,6 +34,22 @@ delay <- read.csv("delay_core_2015_2024.csv")
 delay <- delay %>% filter(Year%in%c("2015","2016","2017","2018","2019","2020","2021","2022","2023","2024"))
 ```
 
+## Load in Cancellation Data and Manipulate
+
+```{r}
+cancel <- read.csv("weather_cancellations_by_month.csv")
+
+cancel <- cancel %>% mutate(Loc = Facility)
+weather <- cancel %>% group_by(Loc,Year) %>%
+  summarise(Weather.cancel = sum(Wx))
+
+weather$Year <- as.character(weather$Year)
+delay2 <- delay %>% full_join(weather, by = c("Year","Loc"))
+
+write.csv(delay2, file = "core_2015_2024.csv")
+```
+
+
 ```{r}
 top10 <- delay %>% group_by(Loc) %>%
   summarise(Total.Delays=sum(Tot.Delays)) %>%
@@ -383,4 +399,6 @@ ggplot(by_region, aes(x = Year, y = Avg_runways, color = Sun.Belt, fill = Sun.Be
   ylim(3.5,4.5) +
   theme_minimal()
 ```
+
+
 
