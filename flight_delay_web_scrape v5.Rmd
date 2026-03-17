@@ -18,7 +18,7 @@ library(rvest)
 # This Wikipedia page has 31 US Large Hub Airports and capacity numbers from 2015-2024
 page <- read_html("https://en.wikipedia.org/wiki/List_of_the_busiest_airports_in_the_United_States")
 
-capacity <- page %>% html_element(xpath='//*[@id="mw-content-text"]/div[2]/table[1]') %>% html_table()
+capacity <- page %>% html_element(xpath='//*[@id="mw-content-text"]/div[2]/table[2]') %>% html_table()
 colnames(capacity) <- c("Rank","Name","Airport","Cities","Metro Area","State","2024","2023","2022","2021","2020","2019","2018","2017","2016","2015")
 
 # Select only IATA Code and The Capacity Numbers by Year
@@ -45,8 +45,7 @@ weather <- cancel %>% group_by(Loc,Year) %>%
 
 weather$Year <- as.character(weather$Year)
 delay2 <- delay %>% full_join(weather, by = c("Year","Loc"))
-
-write.csv(delay2, file = "core_2015_2024.csv")
+#write.csv(delay2, file = "core_2015_2024.csv")
 ```
 
 
@@ -400,5 +399,48 @@ ggplot(by_region, aes(x = Year, y = Avg_runways, color = Sun.Belt, fill = Sun.Be
   theme_minimal()
 ```
 
+## Scatter Plots between variables
 
+```{r}
+delay_capacity %>% head()
+just_airports <- delay_capacity %>% group_by(Loc) %>%
+  summarise(Av_Gates = mean(Gates,na.rm=TRUE),
+            Av_Vol_Delays = mean(DelayRate,na.rm=TRUE),
+            SunBelt = SunBelt[1])
+just_airports
+ggplot(just_airports,aes(x=Av_Gates,y=Av_Vol_Delays)) + geom_point(aes(color=SunBelt,size=2)) +
+  geom_text(aes(label = Loc), position = "jitter")
+```
+
+
+```{r}
+delay_capacity %>% head()
+delay_capacity$SunBelt <- as.factor(delay_capacity$SunBelt)
+just24 <- delay_capacity %>% filter(Year==2024)
+summary_df <- delay_capacity %>% group_by(SunBelt) %>%
+  summarise(Visibility = mean(Perc.Visible,na.rm=TRUE),
+            Runways = mean(Runways,na.rm=TRUE),
+            Gates = mean(Gates,na.rm=TRUE),
+            )
+
+ggplot(summary_df, aes(y=Visibility,color=SunBelt)) + geom_bar()
+summary_df
+```
+
+
+## Runway Configuration Visual
+
+```{r}
+delay_capacity$Configuration <- as.factor(delay_capacity$Configuration)
+runway_df <- delay_capacity %>% group_by(Configuration) %>%
+  summarise(Av_Vol_Delays = mean(Vol.Delays,na.rm=TRUE),
+            Tot_Delays = mean(Tot.Delays,na.rm=TRUE),
+            Delay_rate = mean(DelayRate,na.rm=TRUE))
+
+ggplot(runway_df,aes(x=Configuration,fill=Configuration,y=Av_Vol_Delays)) + geom_col() + labs(title="Runway Configurations' Volume Delays") +
+  theme(plot.title=element_text(size=20,hjust=0.5))
+
+ggplot(runway_df,aes(x=Configuration,fill=Configuration,y=Delay_rate)) + geom_col() + labs(title="Runway Configurations' Volume Delay Rate") +
+  theme(plot.title=element_text(size=20,hjust=0.5))
+```
 
