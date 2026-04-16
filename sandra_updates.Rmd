@@ -1,0 +1,351 @@
+---
+title: "weather_variable_visuals"
+output: md_document
+date: "2026-02-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Scraping Capacity Numbers from Wikipedia
+
+```{r}
+library(tidyverse)
+library(rvest)
+library(corrplot)
+delay <- read.csv("core_2015_2024.csv")
+```
+
+```{r}
+# categorical variables
+delay$Sun.Belt <- factor(delay$Sun.Belt, levels = c(0, 1), labels = c("Non-Sun Belt", "Sun Belt"))
+delay$Configuration <- factor(delay$Configuration)
+delay$Crosswind <- factor(delay$Crosswind, levels = c(0, 1), labels = c("No", "Yes"))
+
+# Y variables
+ggplot(delay, aes(x = Weather.Delays)) +
+  geom_histogram(bins = 25) +
+  labs(title = "Weather Delays")
+
+ggplot(delay, aes(x = Weather.cancel)) +
+  geom_histogram(bins = 25) +
+  labs(title = "Weather Cancellations")
+
+# X variables
+ggplot(delay, aes(x = Sun.Belt)) +
+  geom_bar() +
+  labs(title = "Sun Belt")
+
+ggplot(delay, aes(x = Runways)) +
+  geom_histogram(binwidth = 1) +
+  labs(title = "Runways")
+
+ggplot(delay, aes(x = Configuration)) +
+  geom_bar() +
+  labs(title = "Runway Configuration")
+
+ggplot(delay, aes(x = Crosswind)) +
+  geom_bar() +
+  labs(title = "Crosswind")
+
+ggplot(delay, aes(x = VMC.Max.Capacity)) +
+  geom_histogram(bins = 25) +
+  labs(title = "VMC Max Capacity")
+
+ggplot(delay, aes(x = Gates)) +
+  geom_histogram(bins = 25) +
+  labs(title = "Gates")
+
+ggplot(delay, aes(x = Perc.Visible)) +
+  geom_histogram(bins = 25) +
+  labs(title = "Percent Visible")
+
+ggplot(delay, aes(x = Lost.Capacity.Visibility)) +
+  geom_histogram(bins = 25) +
+  labs(title = "Lost Capacity from Visibility")
+
+
+
+# Y vs X: Weather.Delays
+ggplot(delay, aes(x = Sun.Belt, y = Weather.Delays)) +
+  geom_boxplot() +
+  labs(title = "Weather Delays vs Sun Belt")
+
+ggplot(delay, aes(x = Runways, y = Weather.Delays)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Weather Delays vs Runways")
+
+ggplot(delay, aes(x = Configuration, y = Weather.Delays)) +
+  geom_boxplot() +
+  labs(title = "Weather Delays vs Configuration")
+
+ggplot(delay, aes(x = Crosswind, y = Weather.Delays)) +
+  geom_boxplot() +
+  labs(title = "Weather Delays vs Crosswind")
+
+ggplot(delay, aes(x = VMC.Max.Capacity, y = Weather.Delays)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Weather Delays vs VMC Capacity")
+
+ggplot(delay, aes(x = Gates, y = Weather.Delays)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Weather Delays vs Gates")
+
+ggplot(delay, aes(x = Perc.Visible, y = Weather.Delays)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Weather Delays vs Percent Visible")
+
+ggplot(delay, aes(x = Lost.Capacity.Visibility, y = Weather.Delays)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Weather Delays vs Lost Capacity")
+
+
+
+# Y vs X: Weather.cancel
+ggplot(delay, aes(x = Sun.Belt, y = Weather.cancel)) +
+  geom_boxplot() +
+  labs(title = "Weather Cancellations vs Sun Belt")
+
+ggplot(delay, aes(x = Runways, y = Weather.cancel)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Weather Cancellations vs Runways")
+
+ggplot(delay, aes(x = Configuration, y = Weather.cancel)) +
+  geom_boxplot() +
+  labs(title = "Weather Cancellations vs Configuration")
+
+ggplot(delay, aes(x = Crosswind, y = Weather.cancel)) +
+  geom_boxplot() +
+  labs(title = "Weather Cancellations vs Crosswind")
+
+ggplot(delay, aes(x = VMC.Max.Capacity, y = Weather.cancel)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Weather Cancellations vs VMC Capacity")
+
+ggplot(delay, aes(x = Gates, y = Weather.cancel)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Weather Cancellations vs Gates")
+
+ggplot(delay, aes(x = Perc.Visible, y = Weather.cancel)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Weather Cancellations vs Percent Visible")
+
+ggplot(delay, aes(x = Lost.Capacity.Visibility, y = Weather.cancel)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Weather Cancellations vs Lost Capacity")
+
+
+
+# X vs X interactions
+ggplot(delay, aes(x = Runways, y = Gates)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Runways vs Gates")
+
+ggplot(delay, aes(x = Runways, y = VMC.Max.Capacity)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Runways vs VMC Capacity")
+
+ggplot(delay, aes(x = Gates, y = VMC.Max.Capacity)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Gates vs VMC Capacity")
+
+ggplot(delay, aes(x = Perc.Visible, y = Lost.Capacity.Visibility)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Percent Visible vs Lost Capacity")
+
+ggplot(delay, aes(x = Configuration, y = VMC.Max.Capacity)) +
+  geom_boxplot() +
+  labs(title = "VMC Capacity vs Configuration")
+
+ggplot(delay, aes(x = Crosswind, y = VMC.Max.Capacity)) +
+  geom_boxplot() +
+  labs(title = "VMC Capacity vs Crosswind")
+
+ggplot(delay, aes(x = Sun.Belt, y = Gates)) +
+  geom_boxplot() +
+  labs(title = "Gates vs Sun Belt")
+
+
+
+
+
+# correlation matrix for numeric X variables
+x_num <- delay %>%
+  select(Runways, VMC.Max.Capacity, Gates, Perc.Visible, Lost.Capacity.Visibility)
+
+cor_mat <- cor(x_num, use = "complete.obs")
+corrplot(cor_mat, method = "circle")
+```
+
+```{r}
+#3/26 Update
+#normalized y variable
+delay$Weather.Delays.per.Capacity <- delay$Weather.Delays / delay$VMC.Max.Capacity
+delay$Weather.Delays.per.Gate <- delay$Weather.Delays / delay$Gates
+
+ggplot(delay, aes(x = Sun.Belt, y = Weather.Delays.per.Capacity)) +
+  geom_boxplot()
+
+
+#compare delays vs cancellations
+delay$Cancel.Ratio <- delay$Weather.cancel / (delay$Weather.cancel + delay$Weather.Delays)
+
+ggplot(delay, aes(x = Perc.Visible, y = Cancel.Ratio)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+
+#split by region
+ggplot(delay, aes(x = Perc.Visible, y = Weather.Delays)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~Sun.Belt)
+
+#interaction
+ggplot(delay, aes(x = Perc.Visible, y = Weather.Delays.per.Capacity, color = Sun.Belt)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+#identify non-linear patterns
+ggplot(delay, aes(x = Perc.Visible, y = Weather.Delays)) +
+  geom_point() +
+  geom_smooth(method = "loess")
+
+```
+
+```{r}
+#9/9 Update
+# keep pre- and post-COVID periods only
+delay_did <- delay %>%
+  filter(Year != 2020)
+
+# rebuild variables safely
+delay_did <- delay_did %>%
+  mutate(
+    Sun.Belt.num = case_when(
+      Sun.Belt %in% c(1, "1", "Sun Belt", "SunBelt") ~ 1,
+      TRUE ~ 0
+    ),
+    Sun.Belt = factor(Sun.Belt.num, levels = c(0, 1),
+                      labels = c("Non-Sun Belt", "Sun Belt")),
+    Post.COVID.num = ifelse(Year >= 2021, 1, 0),
+    Post.COVID = factor(Post.COVID.num, levels = c(0, 1),
+                        labels = c("Pre-COVID", "Post-COVID")),
+    log.vol.delays = log(Vol.Delays + 1)
+  )
+
+# simple DiD plot
+ggplot(delay_did,
+       aes(x = Post.COVID, y = log.vol.delays,
+           group = Sun.Belt, color = Sun.Belt)) +
+  stat_summary(fun = mean, geom = "point", size = 3) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1) +
+  labs(
+    title = "Difference-in-Differences: Log Volume Delays",
+    x = "",
+    y = "log(Vol.Delays + 1)",
+    color = "Region"
+  )
+
+# basic DiD model
+did_basic <- lm(log.vol.delays ~ Sun.Belt * Post.COVID, data = delay_did)
+summary(did_basic)
+
+# DiD model with controls
+did_controls <- lm(log.vol.delays ~ Sun.Belt * Post.COVID +
+                     Gates + Runways + VMC.Max.Capacity + Configuration,
+                   data = delay_did)
+summary(did_controls)
+
+# DiD model with year fixed effects
+did_fe <- lm(log.vol.delays ~ Sun.Belt * Post.COVID +
+               Gates + Runways + VMC.Max.Capacity + Configuration + factor(Year),
+             data = delay_did)
+
+summary(did_fe)
+
+# group means for interpretation
+delay_did %>%
+  group_by(Sun.Belt, Post.COVID) %>%
+  summarise(
+    mean_vol_delays = mean(Vol.Delays, na.rm = TRUE),
+    mean_log_vol_delays = mean(log.vol.delays, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  )
+
+```
+
+```{r}
+#4/15 Update
+did_final <- lm(log.vol.delays ~ Sun.Belt * Post.COVID +
+                  Gates + Runways + VMC.Max.Capacity + Configuration,
+                data = delay_did)
+
+summary(did_final)
+
+
+#ARIMA
+library(forecast)
+# load data
+delay2 <- read.csv("core_2015_2024_v2.csv", check.names = FALSE)
+
+# create WICR
+delay2$WICR <- delay2$Weather.cancel / 
+  (delay2$Weather.cancel + delay2$Weather.Delays)
+
+# aggregate by year (average across airports)
+wicr_year <- delay2 %>%
+  group_by(Year) %>%
+  summarise(WICR = mean(WICR, na.rm = TRUE))
+
+# view data
+wicr_year
+
+# create time series object
+wicr_ts <- ts(wicr_year$WICR, start = min(wicr_year$Year), frequency = 1)
+
+# plot time series
+plot(wicr_ts,
+     main = "Weather-Induced Cancellation Ratio Over Time",
+     ylab = "WICR",
+     xlab = "Year")
+
+# fit automatic ARIMA model
+wicr_arima <- auto.arima(wicr_ts)
+
+# model summary
+summary(wicr_arima)
+
+# residual diagnostics
+checkresiduals(wicr_arima)
+
+# forecast next 3 years
+forecast_wicr <- forecast(wicr_arima, h = 3)
+
+# plot forecast
+plot(forecast_wicr,
+     main = "Forecast of Weather-Induced Cancellation Ratio")
+
+```
+
+
+
+
+
